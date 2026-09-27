@@ -1280,11 +1280,22 @@ function openPw(sb){
   $('#pwF').onsubmit=async e=>{e.preventDefault();if($('#pw1').value!==$('#pw2').value){toast('Şifreler aynı değil');return;}if($('#pw1').value.length<6){toast('Şifre en az 6 karakter olmalı');return;}
     const {error}=await sb.auth.updateUser({password:$('#pw1').value});if(error)toast(trErr(error.message));else{closeModal();toast('Şifren değişti');}};
 }
+function credCard(u,pw,sb,titleTxt){
+  const link=location.origin+location.pathname;
+  const msg='Drill Havuzu\n'+link+'\nKullanıcı adı: '+u+'\nŞifre: '+pw+'\n(İlk girişten sonra Şifre butonundan değiştirebilirsin.)';
+  openModal('<div class="mhead"><h2>'+esc(titleTxt||'Hesap hazır')+'</h2></div><div class="mbody"><p style="margin:0">Bu bilgileri antrenöre ilet. Şifreyi daha sonra buradan göremezsin; unutulursa yenisini verirsin.</p>'+
+   '<div class="stats num"><div class="stat"><div class="k">Kullanıcı adı</div><div class="v">'+esc(u)+'</div></div><div class="stat"><div class="k">Şifre</div><div class="v">'+esc(pw)+'</div></div></div>'+
+   '<textarea id="crMsg" readonly style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px;min-height:96px;width:100%">'+esc(msg)+'</textarea>'+
+   '</div><div class="mfoot"><button class="btn" id="crCopy">Mesajı kopyala</button><button class="btn primary" id="okT">Tamam</button></div>');
+  $('#crCopy').onclick=async()=>{const t=$('#crMsg');t.select();t.setSelectionRange(0,99999);
+    try{await navigator.clipboard.writeText(msg);toast('Kopyalandı');}catch(e){try{document.execCommand('copy');toast('Kopyalandı');}catch(e2){toast('Kopyalanamadı, yazıyı elle seç');}}};
+  $('#okT').onclick=()=>openTeam(sb);
+}
 async function openTeam(sb){
   openModal('<div class="mhead"><h2>Ekip</h2><button class="x" id="mx" aria-label="Kapat">×</button></div><div class="mbody">'+
    '<p style="margin:0">Her antrenör için bir kullanıcı adı ve ilk şifre belirle, bunları ona ilet. Giriş yaptıktan sonra kendi şifresini “Şifre” butonundan değiştirebilir.</p>'+
    '<form id="tmF" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px"><input id="tmU" placeholder="Kullanıcı adı (örn. ahmet)" autocapitalize="none" spellcheck="false" required style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;min-width:0"><input id="tmP" placeholder="İlk şifre (en az 6)" required minlength="6" style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;min-width:0"><select id="tmR" class="f"><option value="coach">Antrenör</option><option value="admin">Yönetici</option></select><button class="btn primary">Ekle</button></form>'+
-   '<p class="hint" style="margin:0">Kullanıcı adında Türkçe karakter ve boşluk kullanma (ş→s, ı→i gibi).</p>'+
+   '<p class="hint" style="margin:0">Kullanıcı adında Türkçe karakter ve boşluk kullanma (ş→s, ı→i gibi). Şifreler güvenlik için şifrelenmiş saklanır; buradan görülemez. Unutan biri için “Şifre sıfırla” ile yeni şifre ver.</p>'+
    '<div id="tmL"><p class="hint">Yükleniyor…</p></div></div>');
   $('#mx').onclick=closeModal;
   $('#tmP').value=Math.random().toString(36).slice(2,8);
@@ -1298,10 +1309,10 @@ async function openTeam(sb){
       openModal('<div class="mhead"><h2>Şifre sıfırla</h2><button class="x" id="mx2" aria-label="Kapat">×</button></div><form class="mbody" id="rpF"><p style="margin:0"><b>'+esc(u)+'</b> için yeni şifre:</p><input id="rpP" value="'+np+'" minlength="6" required style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px"><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" id="rpC">Vazgeç</button><button class="btn primary">Kaydet</button></div></form>');
       $('#mx2').onclick=()=>openTeam(sb);$('#rpC').onclick=()=>openTeam(sb);
       $('#rpF').onsubmit=async e=>{e.preventDefault();const pw=$('#rpP').value;const {error}=await sb.rpc('dh_upsert_member',{p_username:u,p_password:pw,p_role:b.dataset.role});
-        if(error)toast(trErr(error.message));else{openTeam(sb);toast(u+' için yeni şifre: '+pw);}};});};
+        if(error)toast(trErr(error.message));else credCard(u,pw,sb,'Yeni şifre');};});};
   $('#tmF').onsubmit=async e=>{e.preventDefault();const u=$('#tmU').value.trim().toLowerCase(),pw=$('#tmP').value;
     const {error}=await sb.rpc('dh_upsert_member',{p_username:u,p_password:pw,p_role:$('#tmR').value});
-    if(error)toast(trErr(error.message));else{openModal('<div class="mhead"><h2>Hesap hazır</h2></div><div class="mbody"><p style="margin:0">Bu bilgileri antrenöre ilet:</p><div class="stats num"><div class="stat"><div class="k">Kullanıcı adı</div><div class="v">'+esc(u)+'</div></div><div class="stat"><div class="k">Şifre</div><div class="v">'+esc(pw)+'</div></div></div><p class="hint" style="margin:0">Giriş yaptıktan sonra şifresini değiştirebilir.</p></div><div class="mfoot"><button class="btn primary" id="okT">Tamam</button></div>');$('#okT').onclick=()=>openTeam(sb);}};
+    if(error)toast(trErr(error.message));else credCard(u,pw,sb,'Hesap hazır');};
   load();
 }
 async function startSupa(){
