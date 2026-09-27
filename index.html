@@ -324,7 +324,7 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
 @media (max-width:820px){
   body{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
   .top-in{padding:8px 16px;gap:10px;flex-wrap:nowrap}
-  .top .tabs,#newBtn,.who,#teamBtn,#pwBtn,#outBtn,#bkBtn,#aiBtn{display:none!important}
+  .top .tabs,#newBtn,.who,#teamBtn,#pwBtn,#outBtn,#bkBtn,#aiBtn,#trashBtn{display:none!important}
   #meBtn{display:inline-flex;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--surface2);align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:18px;color:var(--ink)}
   .brand span{display:inline!important;font-size:20px}
   .side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 58px);z-index:15}
@@ -348,6 +348,7 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
   .mhead{position:sticky;top:0;z-index:3;background:var(--surface);padding-top:calc(12px + env(safe-area-inset-top,0px))}
   .mfoot{position:sticky;bottom:0;z-index:3;background:var(--surface);padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
   .mfoot .btn{flex:1;justify-content:center;padding:12px}
+  .mfoot .btn.danger{flex:0 0 auto;padding:12px 10px;font-size:13px;border-color:transparent}
   .mfoot .spacer{display:none}
   .scrim.sheet{align-items:flex-end}
   .modal.sheet{min-height:0;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -402,6 +403,7 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
     </nav>
     <div class="spacer"></div>
     <span class="who" id="who" hidden></span>
+    <button class="btn" id="trashBtn" hidden>Çöp</button>
     <button class="btn" id="teamBtn" hidden>Ekip</button>
     <button class="btn" id="pwBtn" hidden>Şifre</button>
     <button class="btn" id="outBtn" hidden>Çıkış</button>
@@ -745,12 +747,11 @@ function openDetail(id){
   $('#toDay').value=String(defaultPlanDay());
   $('#toPlan').onclick=()=>{const di=+$('#toDay').value;addToDay(di,id);closeModal();toast('Plana eklendi: '+DAYN[di]+' · '+dayLabel(di));};
   $('#del').onclick=async()=>{
-    if(!(await confirmBox('“'+(d.name||'Bu drill')+'” havuzdan kalıcı olarak silinecek. Planlardaki kayıtları “silinmiş drill” olarak görünür.','Sil')))return;
+    if(!(await confirmBox('“'+(d.name||'Bu drill')+'” havuzdan kaldırılacak. Çöp kutusuna gider, oradan geri alabilirsin.','Çöp kutusuna at')))return;
     try{
-      if(S.db)await S.db.doc('drills/'+id).delete();
+      if(S.db){await S.db.doc('trash/'+id).set(Object.assign({},d,{deletedAt:Date.now(),deletedBy:S.email||S.uid}));await S.db.doc('drills/'+id).delete();}
       S.drills.delete(id);
-      if(S.assets)for(const m of (d.media||[])){for(const aid of [m.id,m.poster].filter(Boolean)){try{await S.assets.delete(aid);}catch(e){}}}
-      toast('Drill silindi');render();
+      closeModal();toast('Çöp kutusuna taşındı');render();
     }catch(err){toast('Silinemedi: '+(err.code||''));}
   };
 }
@@ -1146,8 +1147,28 @@ function bindSwipe(){
   el.addEventListener('touchend',e=>{if(x0==null)return;const t=e.changedTouches[0];const dx=t.clientX-x0,dy=t.clientY-y0;x0=null;
     if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5){const n=S.pday+(dx<0?1:-1);if(n>=0&&n<=6){S.pday=n;renderPlan();}}},{passive:true});
 }
+function openTrash(){
+  if(!S.db){toast('Çöp kutusu bu görünümde yok');return;}
+  openModal('<div class="mhead"><h2>Çöp kutusu</h2><button class="x" id="mx" aria-label="Kapat">×</button></div><div class="mbody"><p class="hint" style="margin:0">Silinen drill\'ler burada durur. Geri alabilir ya da kalıcı silebilirsin.</p><div class="sheetlist" id="trList"><p class="hint">Yükleniyor…</p></div></div>');
+  $('#mx').onclick=closeModal;
+  const draw=async()=>{
+    let docs=[];try{const snap=await S.db.collection('trash').get();docs=snap.docs.map(x=>Object.assign({id:x.id},x.data()));}catch(e){}
+    docs.sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+    $('#trList').innerHTML=docs.length?docs.map(d=>{const c=CAT[(d.cats||[])[0]];
+      return '<div class="pick" style="--c:'+(c?c.c:'var(--ink3)')+'"><div class="row"><span class="nm">'+esc(d.name||'Adsız drill')+'</span><span class="hint num">'+(d.deletedAt?fmtIso(iso(new Date(d.deletedAt))):'')+(d.deletedBy?' · '+esc(uname(d.deletedBy)):'')+'</span></div>'+
+        '<div class="row"><button class="btn sm primary" data-untr="'+esc(d.id)+'">Geri al</button><button class="btn sm danger" data-deltr="'+esc(d.id)+'">Kalıcı sil</button></div></div>';}).join(''):'<p class="hint">Çöp kutusu boş.</p>';
+    document.querySelectorAll('[data-untr]').forEach(b=>b.onclick=async()=>{const id=b.dataset.untr;const doc=docs.find(x=>x.id===id);const body=Object.assign({},doc);delete body.id;delete body.deletedAt;delete body.deletedBy;
+      try{await S.db.doc('drills/'+id).set(body);await S.db.doc('trash/'+id).delete();S.drills.set(id,body);toast('Geri alındı');render();draw();}catch(e){toast('Geri alınamadı');}});
+    document.querySelectorAll('[data-deltr]').forEach(b=>b.onclick=async()=>{const id=b.dataset.deltr;const doc=docs.find(x=>x.id===id);
+      if(!(await confirmBox('“'+(doc&&doc.name||'Bu drill')+'” kalıcı olarak silinecek; görselleri ve videoları da gider. Geri alınamaz.','Kalıcı sil'))){openTrash();return;}
+      try{await S.db.doc('trash/'+id).delete();if(S.assets)for(const m of ((doc&&doc.media)||[])){for(const aid of [m.id,m.poster].filter(Boolean)){try{await S.assets.delete(aid);}catch(e){}}}
+        toast('Kalıcı silindi');openTrash();}catch(e){toast('Silinemedi');}});
+  };
+  draw();
+}
+$('#trashBtn').onclick=openTrash;
 function openMeMenu(){
-  const items=[['aiBtn','Asistan'],['teamBtn','Ekip'],['pwBtn','Şifre değiştir'],['bkBtn','Yedek'],['outBtn','Çıkış']].filter(([id])=>!$('#'+id).hidden);
+  const items=[['aiBtn','Asistan'],['trashBtn','Çöp kutusu'],['teamBtn','Ekip'],['pwBtn','Şifre değiştir'],['bkBtn','Yedek'],['outBtn','Çıkış']].filter(([id])=>!$('#'+id).hidden);
   openModal('<div class="mhead"><h2 style="text-transform:none;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+esc(S.email?uname(S.email):'Menü')+'</h2><button class="x" id="mx" aria-label="Kapat">×</button></div><div class="mbody" style="gap:0">'+
     (items.length?items.map(([id,l])=>'<button class="menuitem" data-me="'+id+'">'+l+'</button>').join(''):'<p class="hint">Bu görünümde ek işlem yok.</p>')+'</div>','sheet');
   $('#mx').onclick=closeModal;
@@ -1186,6 +1207,7 @@ async function makeLocal(){
     delete:async()=>put(path,undefined),
     onSnapshot:(fn)=>{const s={path,fn};subs.push(s);setTimeout(()=>fn(snapDoc(path)),0);return ()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1);};}});
   const db={doc:docRef,collection:col=>({path:col,doc:id=>docRef(col+'/'+(id||rid())),add:async d=>{const r=docRef(col+'/'+rid());await r.set(d);return r;},
+    get:async()=>snapCol(col),
     onSnapshot:(fn)=>{const s={col,fn};subs.push(s);setTimeout(()=>fn(snapCol(col)),0);return ()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1);};}})};
   const assets={upload:async(blob,opt)=>{const id=rid()+rid().slice(0,12);const b=opt&&opt.type&&blob.type!==opt.type?new Blob([blob],{type:opt.type}):blob;await tx(h,'blobs','readwrite',st=>st.put(b,id));const url=URL.createObjectURL(b);BLOBURL.set(id,url);return {id,url,sizeBytes:b.size,contentType:b.type};},
     delete:async id=>{await tx(h,'blobs','readwrite',st=>st.delete(id));BLOBURL.delete(id);return {deleted:true};},list:async()=>({assets:[],usage:{}})};
@@ -1245,8 +1267,9 @@ async function makeSupa(sb,user){
     delete:async()=>{cache.delete(path);notify();const {error}=await sb.from('dh_docs').delete().eq('path',path);if(error)throw err(error);},
     onSnapshot:(fn,onErr)=>{const s={path,fn};subs.push(s);loadCol(colOf(path)).then(()=>fn(snapDoc(path)),e=>onErr&&onErr(e));return ()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1);};}});
   const db={doc:docRef,collection:col=>({path:col,doc:id=>docRef(col+'/'+(id||rid())),add:async d=>{const r=docRef(col+'/'+rid());await r.set(d);return r;},
+    get:async()=>{loaded.delete(col);await loadCol(col);return snapCol(col);},
     onSnapshot:(fn,onErr)=>{const s={col,fn};subs.push(s);loadCol(col).then(()=>fn(snapCol(col)),e=>onErr&&onErr(e));return ()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1);};}})};
-  const EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','video/mp4':'mp4','video/webm':'webm'};
+  const EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','video/mp4':'mp4','video/webm':'webm','video/quicktime':'mov'};
   const assets={
     upload:async(blob,opt)=>{const type=(opt&&opt.type)||blob.type||'application/octet-stream';const id=new Date().toISOString().slice(0,7)+'/'+rid()+'.'+(EXT[type]||'bin');
       const {error}=await sb.storage.from(SUPA.bucket).upload(id,blob,{contentType:type,upsert:false,cacheControl:'31536000'});
@@ -1349,6 +1372,7 @@ render();
   if(user){try{S.uid=await user.id();}catch(e){}try{const c=await user.can('data.write');if(c===false)S.canWrite=false;}catch(e){}}
   if(!S.uid){try{S.uid=localStorage.getItem('dh_uid');if(!S.uid){S.uid='anon-'+Math.random().toString(36).slice(2,10);localStorage.setItem('dh_uid',S.uid);}}catch(e){S.uid='anon';}}
   $('#newBtn').hidden=!S.canWrite;$('#bnNew').style.visibility=S.canWrite?'':'hidden';
+  if(db)$('#trashBtn').hidden=false;
   if(!db){S.loaded=true;render();return;}
   db.collection('drills').onSnapshot(snap=>{
     const m=new Map();snap.docs.forEach(d=>m.set(d.id,d.data()));S.drills=m;S.loaded=true;render();
