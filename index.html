@@ -171,6 +171,10 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
 .vlink .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .vlink .go{color:var(--ink3);font-size:13px;flex:none}
 .vid{border-radius:10px;overflow:hidden;background:#000;max-width:100%}
+.emb{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000;max-width:100%}
+.emb iframe,.emb video{position:absolute;inset:0;width:100%;height:100%;border:0}
+.embrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.embrow .tt{font-weight:600;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vid video{display:block;width:100%;max-height:420px}
 .mitem .src{font-size:10px;font-weight:700;text-transform:uppercase;color:#fff;padding:2px 6px;border-radius:4px;margin-bottom:4px}
 .mitem{flex-direction:column;width:160px;height:100px}
@@ -299,7 +303,7 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
 }
 /* ---------- mobile ---------- */
 .fsel{display:contents}
-.bnav,.mob,#meBtn,#fBtn,.dstrip,.dadd{display:none}
+.bnav,.mob,#meBtn,#fBtn,#catBtn,.dstrip,.dadd{display:none}
 .lay{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;display:inline-flex;align-items:center;color:var(--ink2)}
 .lay svg{width:18px;height:18px}
 .grid.list{grid-template-columns:1fr;gap:8px}
@@ -338,8 +342,17 @@ select.f{border:1px solid var(--line);background:var(--surface);border-radius:8p
   main{padding:14px 16px 24px}
   .hd h1{font-size:26px}
   .toolbar .fsel{display:none}
-  #fBtn{display:inline-flex}
-  .toolbar .search{flex:1 1 0;min-width:0}
+  #fBtn,#catBtn{display:inline-flex}
+  #catBtn{max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side{display:none}
+  .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .catgrid button{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:12px 10px;font-weight:600;text-align:left;min-width:0}
+  .catgrid button .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .catgrid button .n{color:var(--ink3);font-size:12px}
+  .catgrid button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+  .catgrid .dot{width:10px;height:10px;border-radius:3px;flex:none}
+  .toolbar .search{flex:1 1 100%;min-width:0}
+  .toolbar .lay,.toolbar #catBtn,.toolbar #fBtn{flex:0 1 auto}
   .mob{display:inline-flex}
   /* full-screen dialogs, bottom sheets */
   .scrim{padding:0;align-items:stretch}
@@ -544,6 +557,18 @@ function pitchSVG(){
 }
 function ytId(u){const m=String(u).match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{11})/);return m?m[1]:null;}
 function driveId(u){const m=String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([A-Za-z0-9_-]{10,})/);return m?m[1]:null;}
+function vimeoId(u){const m=String(u).match(/vimeo\.com\/(?:video\/)?(\d{6,})/);return m?m[1]:null;}
+function directVid(u){return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(u));}
+/* a URL the app can play inside the page (iframe/video), or null */
+function embedOf(u){
+  const y=ytId(u);if(y)return {kind:'frame',src:'https://www.youtube-nocookie.com/embed/'+y+'?rel=0&playsinline=1'};
+  const d=driveId(u);if(d)return {kind:'frame',src:'https://drive.google.com/file/d/'+d+'/preview'};
+  const v=vimeoId(u);if(v)return {kind:'frame',src:'https://player.vimeo.com/video/'+v};
+  if(/onedrive\.live\.com|1drv\.ms|sharepoint\.com/i.test(u)&&/embed/i.test(u))return {kind:'frame',src:u};
+  if(/dropbox\.com/i.test(u))return {kind:'video',src:u.replace(/[?&]dl=\d/,'').replace('www.dropbox.com','dl.dropboxusercontent.com')};
+  if(directVid(u))return {kind:'video',src:u};
+  return null;
+}
 function linkThumb(u){const y=ytId(u);if(y)return 'https://i.ytimg.com/vi/'+y+'/hqdefault.jpg';const d=driveId(u);if(d)return 'https://drive.google.com/thumbnail?id='+d+'&sz=w640';return null;}
 /* a visual tile for any video item: poster image > video frame > link thumbnail > colored tile; always a play button */
 function videoTile(m){
@@ -636,6 +661,7 @@ function renderPool(){
   h+='<div class="hd"><h1>'+esc(title)+'</h1><span class="sub num">'+l.length+' drill'+(S.view==='forgot'?' · yıldızlamadığın/beğenmediğin ve '+FORGOT_DAYS+'+ gündür plana girmeyenler':'')+'</span></div>';
   h+='<div class="toolbar"><div class="search">'+ICON.search+'<input id="q" type="search" placeholder="Ara: isim, amaç, not, etiket…" value="'+esc(S.q)+'"></div>'+
    '<button class="lay" id="layBtn" aria-label="Görünümü değiştir" title="Liste / kart görünümü">'+(layout()==='list'?LAYIC.grid:LAYIC.list)+'</button>'+
+   '<button class="btn" id="catBtn">'+esc(S.cat==='all'?'Kategori':CAT[S.cat].n)+' ▾</button>'+
    '<button class="btn" id="fBtn">Filtre'+(activeFilters()?' <span class="cnt num">('+activeFilters()+')</span>':'')+'</button>'+
    '<span class="fsel">'+
    '<select class="f" id="fPlayers" aria-label="Oyuncu sayısı"><option value="">Oyuncu: tümü</option><option value="s">≤ 8 oyuncu</option><option value="m">9–14 oyuncu</option><option value="l">15+ oyuncu</option></select>'+
@@ -665,6 +691,7 @@ $('#main').addEventListener('click',e=>{
   if(S.view==='plan'){planClick(e);return;}
   if(e.target.closest('#layBtn')){S.layout=layout()==='list'?'grid':'list';try{localStorage.setItem('dh_layout',S.layout);}catch(err){}renderPool();return;}
   if(e.target.closest('#fBtn')){openFilterSheet();return;}
+  if(e.target.closest('#catBtn')){openCatSheet();return;}
   const ft=e.target.closest('[data-fsnooze]');
   if(ft){
     if(ft.dataset.fstar){toggleMark(ft.dataset.fstar,'stars');return;}
@@ -732,7 +759,13 @@ function openDetail(id){
     '</div>'+
     sec('Amaç',d.goal)+sec('Açıklama / Kurallar',d.desc)+sec('Koçluk notları',d.notes)+
     (vids.length?'<div class="dsec"><h5>Videolar</h5><div class="vlist">'+vids.map(v=>'<div class="vid"><video src="'+imgUrl(v.id)+'"'+(v.poster?' poster="'+imgUrl(v.poster)+'"':'')+' controls playsinline preload="metadata"></video></div>'+(v.title?'<div class="hint">'+esc(v.title)+'</div>':'')).join('')+'</div></div>':'')+
-    (links.length?'<div class="dsec"><h5>Video linkleri</h5><div class="vlist">'+links.map(l=>'<a class="vlink" href="'+esc(l.url)+'" target="_blank" rel="noopener"><span class="vthumb">'+videoTile(l)+'</span>'+srcBadge(l.url)+'<span class="tt">'+esc(l.title||l.url.replace(/^https?:\/\/(www\.)?/,''))+'</span><span class="go">Aç ↗</span></a>').join('')+'</div></div>':'')+
+    (links.length?'<div class="dsec"><h5>Video linkleri</h5><div class="vlist">'+links.map(l=>{
+      const em=S.mode==='claude'?null:embedOf(l.url);
+      const cap='<div class="embrow">'+srcBadge(l.url)+'<span class="tt">'+esc(l.title||l.url.replace(/^https?:\/\/(www\.)?/,''))+'</span><a class="btn sm" href="'+esc(l.url)+'" target="_blank" rel="noopener">Kaynakta aç ↗</a></div>';
+      if(em&&em.kind==='frame')return '<div><div class="emb"><iframe src="'+esc(em.src)+'" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>'+cap+'</div>';
+      if(em&&em.kind==='video')return '<div><div class="emb"><video src="'+esc(em.src)+'" controls playsinline preload="metadata"></video></div>'+cap+'</div>';
+      return '<a class="vlink" href="'+esc(l.url)+'" target="_blank" rel="noopener"><span class="vthumb">'+videoTile(l)+'</span>'+srcBadge(l.url)+'<span class="tt">'+esc(l.title||l.url.replace(/^https?:\/\/(www\.)?/,''))+'</span><span class="go">Aç ↗</span></a>';
+    }).join('')+'</div></div>':'')+
     useSec+
     '<div class="dsec"><h5>Plana ekle · '+fmtD(wk)+' haftası</h5><div style="display:flex;gap:8px;flex-wrap:wrap"><select class="f" id="toDay">'+dayOpts+'</select><button class="btn" id="toPlan">Plana ekle</button></div></div>'+
    '</div>'+
@@ -793,7 +826,7 @@ function openForm(id,pre){
       '</div>'+
       '<div class="linkrow"><input id="f_link" placeholder="Video linki: Drive, YouTube, OneDrive, Dropbox…"><input id="f_ltitle" placeholder="Başlık (isteğe bağlı)"><button type="button" class="btn sm" id="addLink">Link ekle</button></div>'+
       '<div class="srcrow" id="srcPrev"></div>'+
-      '<span class="hint">Video dosyası en fazla '+S.maxVidMB+' MB (telefonla çekilen 20–30 sn civarı).  Daha uzun videoları Drive vb. yükleyip linkini ekle; Drive\'da paylaşımı “Bağlantıya sahip olan herkes” yapmayı unutma.</span>'+
+      '<span class="hint">Video dosyası en fazla '+S.maxVidMB+' MB (telefonla çekilen 20–30 sn civarı).  Daha uzun videoları Drive vb. yükleyip linkini ekle; Drive ve YouTube linkleri uygulamanın içinde oynar; Drive\'da paylaşımı “Bağlantıya sahip olan herkes” yapmayı unutma.</span>'+
       '<span class="hint" id="upHint"></span></div>'+
     '</div>'+
    '</form>'+
@@ -1117,6 +1150,16 @@ const LAYIC={list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
   grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>'};
 function layout(){if(S.layout)return S.layout;try{const v=localStorage.getItem('dh_layout');if(v)return v;}catch(e){}return isMob()?'list':'grid';}
 function activeFilters(){return [S.fPlayers,S.fInt,S.fDur].filter(Boolean).length+(S.sort!=='new'?1:0);}
+function openCatSheet(){
+  const all=drillList();
+  const pool=S.view==='favs'?all.filter(d=>mySet(d.stars)):S.view==='forgot'?forgotten():all;
+  const cnt=k=>pool.filter(d=>(d.cats||[]).includes(k)).length;
+  const btn=(k,n,c,num)=>'<button data-catpick="'+k+'" aria-pressed="'+(S.cat===k)+'"><span class="dot" style="background:'+c+'"></span><span class="nm">'+esc(n)+'</span><span class="n num">'+num+'</span></button>';
+  openModal('<div class="mhead"><h2>Kategori</h2><button class="x" id="mx" aria-label="Kapat">×</button></div><div class="mbody"><div class="catgrid">'+
+    btn('all','Tümü','var(--ink3)',pool.length)+CATS.map(c=>btn(c.k,c.n,c.c,cnt(c.k))).join('')+'</div></div>','sheet');
+  $('#mx').onclick=closeModal;
+  document.querySelectorAll('[data-catpick]').forEach(b=>b.onclick=()=>{S.cat=b.dataset.catpick;closeModal();renderSide();renderPool();window.scrollTo(0,0);});
+}
 function openFilterSheet(){
   const sel=(id,opts,val)=>'<div class="fld"><label for="'+id+'">'+opts[0]+'</label><select id="'+id+'" class="f" style="padding:11px">'+opts[1].map(o=>'<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>';
   openModal('<div class="mhead"><h2>Filtre</h2><button class="x" id="mx" aria-label="Kapat">×</button></div><div class="mbody">'+
